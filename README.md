@@ -1,5 +1,32 @@
 # deepseek-harness-plugin
 
+> **DomonAI fork 说明（2026-11-23）**
+>
+> 本仓库是 [codelogickeep/deepseek-harness-plugin](https://github.com/codelogickeep/deepseek-harness-plugin)
+> （MIT）的 **workerd 兼容性 fork**，由 DomonAI 维护。fork 缘由：上游钉钉桥接器的
+> Stream 传输层依赖 npm `ws` 包与官方 `dingtalk-stream` SDK（其内部同样依赖
+> `ws`/axios），而 Cloudflare Workers（workerd）运行环境没有 npm 原生/协议库的
+> socket 面，插件无法原样装载。
+>
+> 改造点（最小且如实）：
+> 1. 新增 `src/dingtalk-stream-compat.js` —— 按官方
+>    [dingtalk-stream-sdk-nodejs](https://github.com/open-dingtalk/dingtalk-stream-sdk-nodejs)（MIT）
+>    的线上协议 1:1 重写的 workerd 兼容形 DWClient：传输层用全局 WebSocket +
+>    fetch，替代 `ws` + axios；订阅/ACK/ping/KEEPALIVE 帧形不变；另如实补上
+>    官方 SDK 未透传的 socket error/close 事件。
+> 2. `src/dingtalk-client.js` —— 改从兼容模块导入 DWClient；全局 WebSocket 在
+>    CONNECTING 期 close() 无 `ws` 包的 error 噪声，删去原降噪处理。
+> 3. `package.json` —— 移除 `ws` 与 `dingtalk-stream` 依赖（运行时零 npm 依赖）。
+>
+> 未改动面（如实披露）：ui-enhance 的 IDE 打开/文件树刷新仍依赖子进程与
+> fs.watch（workerd 下响亮失败，仅本地 Node 形可用）；browser-reader 的
+> Playwright 依赖同样仅本地形态。钉钉 Stream 通道与 DSH /api 客户端（本就
+> 使用全局 WebSocket/fetch）在 workerd 可运行；跨空闲窗的常驻连接需要平台的
+> 持久运行支持。上游如接受传输层抽象，这些改动可整理回馈上游。
+>
+> 许可：MIT（沿用上游，Copyright (c) 2026 codelogickeep；本 fork 改动同样以
+> MIT 提供）。
+
 **DSH（DeepSeek Harness）插件集合仓库 + 安装脚手架**：把你有用的 DSH 插件统一沉淀在这里，并提供开发/安装插件的脚手架。
 
 🚀 **快速开始**（一键装齐全部插件）：

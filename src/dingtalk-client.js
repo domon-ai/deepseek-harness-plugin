@@ -3,7 +3,10 @@
  *
  * 钉钉企业内部应用客户端（Stream 模式）。
  *
- * 连接：官方 dingtalk-stream SDK (DWClient) 连钉钉 Stream 网关。
+ * 连接：DWClient 连钉钉 Stream 网关。DomonAI fork 注：本仓库的 workerd 兼容
+ *       形使用 ./dingtalk-stream-compat.js（协议 1:1 对齐官方
+ *       dingtalk-stream-sdk-nodejs，传输层改全局 WebSocket + fetch）；官方
+ *       npm 包依赖 `ws`/axios，在 workerd（无 npm 协议库 socket 面）不可装载。
  * 订阅：必须用 registerCallbackListener(TOPIC_ROBOT, cb) —— 这会把
  *       { type:'CALLBACK', topic:'/v1.0/im/bot/messages/get' } 追加到
  *       subscriptions 中，机器人消息经 CALLBACK 通道分发（不是 EVENT 通道）。
@@ -17,8 +20,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { WebSocket } from 'ws';
-import { DWClient, TOPIC_ROBOT } from 'dingtalk-stream';
+import { DWClient, TOPIC_ROBOT } from './dingtalk-stream-compat.js';
 
 /**
  * @param {object} opts
@@ -129,25 +131,16 @@ export class DingTalkClient extends EventEmitter {
   }
 
   /**
-   * 安全关闭一个 SDK client。
+   * 安全关闭一个 client。
    *
-   * 背景：ws 在 CONNECTING 状态下调用 close()/terminate() 都会触发 'error'
-   * 事件（"WebSocket was closed before the connection was established"），
-   * SDK 注册的 error 监听器会 console.warn("ERROR", ...)、terminate() 并
-   * reject()，产生噪音且干扰守护流程。
-   *
-   * 因此当 socket 仍处于 CONNECTING 时，先摘除 SDK 的 error 监听器并换上
-   * noop（保留 close 监听器，让 SDK 仍能正确标记 connected=false），再关闭，
-   * 使这个即将废弃的连接安静退出。
+   * DomonAI fork 注：全局 WebSocket（workerd / Node ≥22，WHATWG 形）在
+   * CONNECTING 状态下 close() 按规范静默失败该连接，只会触发 'close' 而无
+   * 'error' 噪声——`ws` 包时代「先摘除 error 监听器再关」的降噪处理不再
+   * 需要，直接 disconnect 即可。
    */
   _safeDisconnect(client) {
     if (!client) return;
-    const socket = client.socket;
     try {
-      if (socket && socket.readyState === WebSocket.CONNECTING) {
-        socket.removeAllListeners('error');
-        socket.on('error', () => {});
-      }
       client.disconnect();
     } catch {
       // 兜底：任何异常都忽略，重建流程继续
